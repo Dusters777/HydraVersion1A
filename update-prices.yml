@@ -1,0 +1,45 @@
+name: Update Hydra prices
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # about every 15 minutes (GitHub may run it a little late)
+  workflow_dispatch:          # lets you press "Run workflow" in the Actions tab
+  push:
+    paths:
+      - symbols.txt
+      - fetch_prices.py
+      - .github/workflows/update-prices.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hydra-prices
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install yfinance
+        run: pip install --quiet yfinance
+      - name: Fetch prices from Yahoo Finance
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}   # optional backup for stocks
+        run: python fetch_prices.py
+      - name: Commit data/prices.json
+        run: |
+          git config user.name "hydra-bot"
+          git config user.email "hydra-bot@users.noreply.github.com"
+          git add data/prices.json
+          if git diff --cached --quiet; then
+            echo "No price changes."
+          else
+            git commit -m "Update prices"
+            git pull --rebase
+            git push
+          fi
